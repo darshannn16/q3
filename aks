@@ -1,0 +1,253 @@
+//viewBlogs.jsx
+
+
+
+
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import './ViewBlogs.css';
+
+function ViewBlogs() {
+  const [blogs, setBlogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchBlogs = async () => {
+      try {
+        const res = await axios.get('/api/blogs');
+        setBlogs(res.data.blogs || []);
+      } catch {
+        setError('Unable to load blogs');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBlogs();
+  }, []);
+
+  if (loading) return <p>Loading blogs...</p>;
+  if (error) return <p>[Error - You need to specify the message]</p>;
+  if (blogs.length === 0) return <p>No blogs available yet</p>;
+
+  return (
+    <div className="view-blogs-container">
+      <h2>All Blog Posts</h2>
+      <div className="blog-grid">
+        {blogs.map((blog) => (
+          <div key={blog._id} className="blog-card">
+            <h3>{blog.title}</h3>
+            <p>By {blog.author}</p>
+            <p>{blog.content}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default ViewBlogs;
+
+
+-----------------------------------------------------
+//Home.jsx
+
+
+
+import React from 'react';
+import './Home.css';
+import { Link } from 'react-router-dom';
+
+function Home() {
+  return (
+    <div className="home-container">
+      <h1>BlogSpace Management System</h1>
+      <div className="button-group">
+        <Link to="/add-blog">
+          <button>Add Blog</button>
+        </Link>
+        <Link to="/view-blogs">
+          <button>View Blogs</button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default Home;
+
+--------------------------------------------
+
+Addblog.jsx
+
+
+
+import React, { useState } from 'react';
+import axios from 'axios';
+import './AddBlog.css';
+
+function AddBlog() {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!title.trim() || !content.trim()) {
+      setError('Title and content are required');
+      return;
+    }
+
+    try {
+      const res = await axios.post('/api/blogs', { title, content });
+      if (res.status === 201) {
+        setSuccess('Blog created successfully');
+        setError('');
+      }
+    } catch {
+      setError('Error creating blog');
+    }
+  };
+
+  return (
+    <div className="add-blog-container">
+      <h2>Create New Blog Post</h2>
+      <form onSubmit={handleSubmit}>
+        <label htmlFor="title">Blog Title</label>
+        <input
+          id="title"
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+
+        <label htmlFor="content">Blog Content</label>
+        <textarea
+          id="content"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+        />
+
+        <button type="submit">Publish Blog</button>
+      </form>
+
+      {error && <p className="error-text">[Error - You need to specify the message]</p>}
+      {success && <p className="success-text">{success}</p>}
+    </div>
+  );
+}
+
+export default AddBlog;
+
+------------------------------------------------------------
+//blogModel.js
+
+const mongoose = require('mongoose');
+
+const blogSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: [true, 'Title is required']
+    },
+    content: {
+      type: String,
+      required: [true, 'Content is required']
+    },
+    author: {
+      type: String,
+      default: 'Anonymous'
+    }
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model('Blog', blogSchema);
+--------------------------------------------------------------------
+
+//blogController.js
+
+const Blog = require('../models/blogModel');
+
+// CREATE BLOG
+exports.createBlog = async (req, res) => {
+  try {
+    const { title, content, author } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ message: 'Title and content are required' });
+    }
+
+    const blog = await Blog.create({
+      title,
+      content,
+      author: author || 'Anonymous'
+    });
+
+    res.status(201).json({
+      message: 'Blog created successfully',
+      blog
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// GET ALL BLOGS
+exports.getBlogs = async (req, res) => {
+  try {
+    const blogs = await Blog.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      message: 'Blogs retrieved successfully',
+      blogs,
+      count: blogs.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+---------------------------------------
+
+//blogRoutes.js
+
+const express = require('express');
+const router = express.Router();
+const blogController = require('../controllers/blogController');
+
+router.post('/blogs', blogController.createBlog);
+router.get('/blogs', blogController.getBlogs);
+
+module.exports = router;
+
+
+------------------------------------------------------
+//index.jsx
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+require('dotenv').config();
+
+const blogRoutes = require('./routes/blogRoutes');
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+app.use('/api', blogRoutes);
+
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/blogspace';
+
+mongoose.connect(MONGO_URI)
+  .then(() => {
+    console.log('✅ MongoDB Connected');
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+  })
+  .catch((err) => console.error('❌ MongoDB Connection Error:', err));
+
+module.exports = app; // for testing if needed
