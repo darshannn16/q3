@@ -1,15 +1,12 @@
-# BlogSpace Management System - Complete Code
+# COMPLETE BLOGSPACE MANAGEMENT SYSTEM CODE
 
-I'll provide you with all the necessary files based on the requirements from the images. This is a MERN stack application with React frontend and Node.js/Express/MongoDB backend.
+## BACKEND FILES
 
-## Backend Files
-
-### File: nodeapp/package.json
+### nodeapp/package.json
 ```json
 {
   "name": "blogspace-backend",
   "version": "1.0.0",
-  "description": "BlogSpace Management System Backend",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -18,24 +15,19 @@ I'll provide you with all the necessary files based on the requirements from the
   "dependencies": {
     "express": "^4.18.2",
     "mongoose": "^7.0.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.0.3"
-  },
-  "devDependencies": {
-    "nodemon": "^2.0.22"
+    "cors": "^2.8.5"
   }
 }
 ```
 
-### File: nodeapp/models/blogModel.js
+### nodeapp/models/blogModel.js
 ```javascript
-// nodeapp/models/blogModel.js
 const mongoose = require('mongoose');
 
 const blogSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: true,
+    required: [true, 'Title is required'],
     trim: true
   },
   author: {
@@ -45,82 +37,59 @@ const blogSchema = new mongoose.Schema({
   },
   content: {
     type: String,
-    required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+    required: [true, 'Content is required'],
+    trim: true
   }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Blog', blogSchema);
 ```
 
-### File: nodeapp/routers/blogRouter.js
+### nodeapp/controllers/blogController.js
 ```javascript
-// nodeapp/routers/blogRouter.js
-const express = require('express');
-const router = express.Router();
 const Blog = require('../models/blogModel');
 
-// Get all blogs
-router.get('/blogs', async (req, res) => {
+exports.createBlog = async (req, res) => {
+  try {
+    const { title, content, author } = req.body;
+    if (!title || !content) {
+      return res.status(400).json({ message: 'Title and content are required' });
+    }
+    const newBlog = await Blog.create({
+      title: title.trim(),
+      content: content.trim(),
+      author: author?.trim() || 'Anonymous'
+    });
+    res.status(201).json({ message: 'Blog created successfully', blog: newBlog });
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
+
+exports.getBlogs = async (req, res) => {
   try {
     const blogs = await Blog.find().sort({ createdAt: -1 });
-    res.status(200).json(blogs);
+    res.status(200).json({ message: 'Blogs retrieved successfully', blogs, count: blogs.length });
   } catch (error) {
-    console.error('Error fetching blogs:', error);
-    res.status(500).json({ 
-      message: 'Unable to load blogs. Please try again later.',
-      error: error.message 
-    });
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
-});
+};
+```
 
-// Create a new blog
-router.post('/blogs', async (req, res) => {
-  try {
-    const { title, author, content } = req.body;
+### nodeapp/routers/blogRouter.js
+```javascript
+const express = require('express');
+const router = express.Router();
+const blogController = require('../controllers/blogController');
 
-    // Server-side validation
-    if (!title || !content) {
-      return res.status(400).json({ 
-        message: 'Title and Content are required fields.' 
-      });
-    }
-
-    const newBlog = new Blog({
-      title: title.trim(),
-      author: author?.trim() || 'Anonymous',
-      content: content.trim()
-    });
-
-    const savedBlog = await newBlog.save();
-    res.status(201).json(savedBlog);
-  } catch (error) {
-    console.error('Error creating blog:', error);
-    
-    // Handle MongoDB constraint violations
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({ 
-        message: 'Validation error. Please check your input.',
-        error: error.message 
-      });
-    }
-
-    res.status(500).json({ 
-      message: 'Unable to create blog. Please try again later.',
-      error: error.message 
-    });
-  }
-});
+router.get('/blogs', blogController.getBlogs);
+router.post('/blogs', blogController.createBlog);
 
 module.exports = router;
 ```
 
-### File: nodeapp/index.js
+### nodeapp/index.js
 ```javascript
-// nodeapp/index.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -129,63 +98,26 @@ const blogRouter = require('./routers/blogRouter');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/blogdb';
-
-mongoose.connect(MONGODB_URI, {
+mongoose.connect('mongodb://localhost:27017/blogdb', {
   useNewUrlParser: true,
   useUnifiedTopology: true
-})
-.then(() => {
-  console.log('✅ Successfully connected to MongoDB');
-  console.log(`📊 Database: ${mongoose.connection.name}`);
-})
-.catch((error) => {
-  console.error('❌ MongoDB connection error:', error);
-  process.exit(1);
-});
+}).then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Error:', err));
 
-// Routes
 app.use('/api', blogRouter);
 
-// Health check route
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'BlogSpace API is running',
-    status: 'OK',
-    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
-  });
-});
-
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).json({ message: 'Route not found' });
-});
-
-// Error Handler
-app.use((err, req, res, next) => {
-  console.error('Server Error:', err);
-  res.status(500).json({ 
-    message: 'Internal Server Error',
-    error: err.message 
-  });
-});
-
-// Start Server
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-  console.log(`🌐 API URL: http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 ```
 
-## Frontend Files
+---
 
-### File: react-app/package.json
+## FRONTEND FILES
+
+### react-app/package.json
 ```json
 {
   "name": "blogspace-frontend",
@@ -202,50 +134,25 @@ app.listen(PORT, () => {
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "test": "react-scripts test"
   }
 }
 ```
 
-### File: react-app/src/apiConfig.js
+### react-app/src/index.js
 ```javascript
-// react-app/src/apiConfig.js
-import axios from 'axios';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  timeout: 10000
-});
-
-export default api;
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<React.StrictMode><App /></React.StrictMode>);
 ```
 
-### File: react-app/src/App.js
+### react-app/src/App.js
 ```javascript
-// react-app/src/App.js
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './Components/Home';
@@ -256,13 +163,11 @@ import './App.css';
 function App() {
   return (
     <Router>
-      <div className="App">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/add-blog" element={<AddBlog />} />
-          <Route path="/view-blogs" element={<ViewBlogs />} />
-        </Routes>
-      </div>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/add-blog" element={<AddBlog />} />
+        <Route path="/view-blogs" element={<ViewBlogs />} />
+      </Routes>
     </Router>
   );
 }
@@ -270,36 +175,22 @@ function App() {
 export default App;
 ```
 
-### File: react-app/src/Components/Home.jsx
+### react-app/src/Components/Home.jsx
 ```javascript
-// react-app/src/Components/Home.jsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
 
 function Home() {
   const navigate = useNavigate();
-
   return (
     <div className="home-container">
       <div className="home-card">
-        <h1 className="home-title">BlogSpace</h1>
-        <h2 className="home-subtitle">Management System</h2>
+        <h1 className="home-title">BlogSpace Management System</h1>
         <p className="home-tagline">Share your thoughts with the world</p>
-        
         <div className="home-buttons">
-          <button 
-            className="btn btn-primary btn-home"
-            onClick={() => navigate('/add-blog')}
-          >
-            Add Blog
-          </button>
-          <button 
-            className="btn btn-success btn-home"
-            onClick={() => navigate('/view-blogs')}
-          >
-            View Blogs
-          </button>
+          <button className="btn btn-primary btn-home" onClick={() => navigate('/add-blog')}>Add Blog</button>
+          <button className="btn btn-success btn-home" onClick={() => navigate('/view-blogs')}>View Blogs</button>
         </div>
       </div>
     </div>
@@ -309,141 +200,41 @@ function Home() {
 export default Home;
 ```
 
-### File: react-app/src/Components/Home.css
-```css
-/* react-app/src/Components/Home.css */
-.home-container {
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
-}
-
-.home-card {
-  background: white;
-  padding: 60px 80px;
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  text-align: center;
-  max-width: 500px;
-  width: 100%;
-}
-
-.home-title {
-  font-size: 3rem;
-  font-weight: 700;
-  color: #2d3748;
-  margin-bottom: 10px;
-}
-
-.home-subtitle {
-  font-size: 1.8rem;
-  font-weight: 500;
-  color: #4a5568;
-  margin-bottom: 20px;
-}
-
-.home-tagline {
-  font-size: 1.1rem;
-  color: #718096;
-  margin-bottom: 40px;
-}
-
-.home-buttons {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-}
-
-.btn-home {
-  padding: 12px 30px;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-home:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-}
-```
-
-### File: react-app/src/Components/AddBlog.jsx
+### react-app/src/Components/AddBlog.jsx
 ```javascript
-// react-app/src/Components/AddBlog.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../apiConfig';
+import axios from 'axios';
 import './AddBlog.css';
 
 function AddBlog() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    title: '',
-    author: '',
-    content: ''
-  });
+  const [formData, setFormData] = useState({ title: '', author: '', content: '' });
   const [message, setMessage] = useState({ text: '', type: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Client-side validation
     if (!formData.title.trim() || !formData.content.trim()) {
-      setMessage({ 
-        text: 'Title and Content are required fields.', 
-        type: 'error' 
-      });
+      setMessage({ text: 'Title and content are required', type: 'error' });
       return;
     }
-
     setIsSubmitting(true);
-    setMessage({ text: '', type: '' });
-
     try {
-      await api.post('/blogs', {
+      await axios.post('http://localhost:8080/api/blogs', {
         title: formData.title.trim(),
         author: formData.author.trim() || 'Anonymous',
         content: formData.content.trim()
       });
-
-      setMessage({ 
-        text: 'Blog post created successfully!', 
-        type: 'success' 
-      });
-
-      // Reset form
+      setMessage({ text: 'Blog post created successfully!', type: 'success' });
       setFormData({ title: '', author: '', content: '' });
-
-      // Navigate to View Blogs after 1.5 seconds
-      setTimeout(() => {
-        navigate('/view-blogs');
-      }, 1500);
-
+      setTimeout(() => navigate('/view-blogs'), 1500);
     } catch (error) {
-      console.error('Error creating blog:', error);
-      
-      const errorMessage = error.response?.data?.message || 
-                          'Unable to create blog. Please try again later.';
-      
-      setMessage({ 
-        text: errorMessage, 
-        type: 'error' 
-      });
+      setMessage({ text: error.response?.data?.message || 'Unable to create blog. Please try again later.', type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -453,70 +244,23 @@ function AddBlog() {
     <div className="add-blog-container">
       <div className="add-blog-wrapper">
         <h1 className="page-title">Create New Blog Post</h1>
-        
-        {message.text && (
-          <div className={`alert alert-${message.type === 'success' ? 'success' : 'danger'}`} role="alert">
-            {message.text}
-          </div>
-        )}
-
+        {message.text && <div className={`alert alert-${message.type === 'success' ? 'success' : 'danger'}`}>{message.text}</div>}
         <form onSubmit={handleSubmit}>
           <div className="mb-3">
             <label htmlFor="title" className="form-label">Blog Title</label>
-            <input
-              type="text"
-              className="form-control"
-              id="title"
-              name="title"
-              value={formData.title}
-              onChange={handleChange}
-              placeholder="Enter blog title"
-              required
-            />
+            <input type="text" className="form-control" id="title" name="title" value={formData.title} onChange={handleChange} placeholder="Enter blog title" />
           </div>
-
           <div className="mb-3">
             <label htmlFor="author" className="form-label">Author</label>
-            <input
-              type="text"
-              className="form-control"
-              id="author"
-              name="author"
-              value={formData.author}
-              onChange={handleChange}
-              placeholder="Enter author name (optional)"
-            />
+            <input type="text" className="form-control" id="author" name="author" value={formData.author} onChange={handleChange} placeholder="Enter author name (optional)" />
           </div>
-
           <div className="mb-3">
             <label htmlFor="content" className="form-label">Blog Content</label>
-            <textarea
-              className="form-control"
-              id="content"
-              name="content"
-              rows="10"
-              value={formData.content}
-              onChange={handleChange}
-              placeholder="Write your blog content here..."
-              required
-            ></textarea>
+            <textarea className="form-control" id="content" name="content" rows="10" value={formData.content} onChange={handleChange} placeholder="Write your blog content here..."></textarea>
           </div>
-
           <div className="button-group">
-            <button 
-              type="submit" 
-              className="btn btn-primary"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Publishing...' : 'Publish Blog'}
-            </button>
-            <button 
-              type="button" 
-              className="btn btn-secondary"
-              onClick={() => navigate('/')}
-            >
-              Back to Home
-            </button>
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>{isSubmitting ? 'Publishing...' : 'Publish Blog'}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>Back to Home</button>
           </div>
         </form>
       </div>
@@ -527,381 +271,196 @@ function AddBlog() {
 export default AddBlog;
 ```
 
-### File: react-app/src/Components/AddBlog.css
-```css
-/* react-app/src/Components/AddBlog.css */
-.add-blog-container {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  padding: 40px 20px;
-}
-
-.add-blog-wrapper {
-  max-width: 800px;
-  margin: 0 auto;
-  background: white;
-  padding: 40px;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-}
-
-.page-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: #2d3748;
-  margin-bottom: 30px;
-  text-align: center;
-}
-
-.form-label {
-  font-weight: 600;
-  color: #4a5568;
-  margin-bottom: 8px;
-}
-
-.form-control {
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 1rem;
-  transition: border-color 0.3s;
-}
-
-.form-control:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.button-group {
-  display: flex;
-  gap: 15px;
-  margin-top: 30px;
-}
-
-.button-group .btn {
-  flex: 1;
-  padding: 12px;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 8px;
-  transition: all 0.3s;
-}
-
-.button-group .btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-}
-
-.alert {
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 20px;
-}
-```
-
-### File: react-app/src/Components/ViewBlogs.jsx
+### react-app/src/Components/ViewBlogs.jsx
 ```javascript
-// react-app/src/Components/ViewBlogs.jsx
-import React, { useState, useEffect } from 'react';
+import React, { Component } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../apiConfig';
+import axios from 'axios';
 import './ViewBlogs.css';
 
-function ViewBlogs() {
-  const navigate = useNavigate();
-  const [blogs, setBlogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+class ViewBlogsClass extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { blogs: [], loading: true, error: '' };
+  }
 
-  useEffect(() => {
-    fetchBlogs();
-  }, []);
+  componentDidMount() {
+    this.fetchBlogs();
+  }
 
-  const fetchBlogs = async () => {
-    setLoading(true);
-    setError('');
-    
+  fetchBlogs = async () => {
+    this.setState({ loading: true, error: '' });
     try {
-      const response = await api.get('/blogs');
-      setBlogs(response.data);
+      const response = await axios.get('http://localhost:8080/api/blogs');
+      this.setState({ blogs: response.data.blogs || [], loading: false });
     } catch (error) {
-      console.error('Error fetching blogs:', error);
-      setError('Unable to load blogs. Please try again later.');
-    } finally {
-      setLoading(false);
+      this.setState({ error: 'Unable to load blogs. Please try again later.', loading: false });
     }
   };
 
-  const formatDate = (dateString) => {
-    const options = { 
-      year: 'numeric', 
-      month: 'numeric', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    };
-    return new Date(dateString).toLocaleString('en-US', options);
+  formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString('en-US', { 
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true
+    });
   };
 
-  const truncateContent = (content, maxLength = 150) => {
-    if (content.length <= maxLength) return content;
-    return content.substring(0, maxLength) + '...';
+  truncateContent = (content, maxLength = 150) => {
+    return content.length <= maxLength ? content : content.substring(0, maxLength) + '...';
   };
 
-  return (
-    <div className="view-blogs-container">
-      <div className="view-blogs-header">
-        <h1 className="page-title">All Blog Posts</h1>
-        <div className="header-buttons">
-          <button 
-            className="btn btn-info"
-            onClick={fetchBlogs}
-            disabled={loading}
-          >
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
-          <button 
-            className="btn btn-secondary"
-            onClick={() => navigate('/')}
-          >
-            Back to Home
-          </button>
-        </div>
-      </div>
+  render() {
+    const { blogs, loading, error } = this.state;
+    const { navigate } = this.props;
 
-      {error && (
-        <div className="alert alert-danger" role="alert">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="loading-container">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
+    return (
+      <div className="view-blogs-container">
+        <div className="view-blogs-header">
+          <h1 className="page-title">All Blog Posts</h1>
+          <div className="header-buttons">
+            <button className="btn btn-info" onClick={this.fetchBlogs} disabled={loading}>
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button className="btn btn-secondary" onClick={() => navigate('/')}>Back to Home</button>
           </div>
-          <p className="loading-text">Loading blogs...</p>
         </div>
-      ) : blogs.length === 0 ? (
-        <div className="no-blogs-container">
-          <h3>No blogs available yet!</h3>
-          <p>Be the first to share your thoughts.</p>
-          <button 
-            className="btn btn-primary"
-            onClick={() => navigate('/add-blog')}
-          >
-            Create First Blog
-          </button>
-        </div>
-      ) : (
-        <div className="blogs-grid">
-          {blogs.map((blog) => (
-            <div key={blog._id} className="blog-card">
-              <h2 className="blog-title">{blog.title}</h2>
-              <div className="blog-meta">
-                <span className="blog-author">By {blog.author}</span>
-                <span className="blog-date">
-                  Posted on {formatDate(blog.createdAt)}
-                </span>
+        {error && <div className="alert alert-danger">{error}</div>}
+        {loading ? (
+          <div className="loading-container">
+            <div className="spinner-border text-primary"></div>
+            <p className="loading-text">Loading blogs...</p>
+          </div>
+        ) : blogs.length === 0 ? (
+          <div className="no-blogs-container">
+            <h3>No blogs available yet!</h3>
+            <p>Be the first to share your thoughts.</p>
+            <button className="btn btn-primary" onClick={() => navigate('/add-blog')}>Create First Blog</button>
+          </div>
+        ) : (
+          <div className="blogs-grid">
+            {blogs.map(blog => (
+              <div key={blog._id} className="blog-card">
+                <h2 className="blog-title">{blog.title}</h2>
+                <div className="blog-meta">
+                  <span className="blog-author">By {blog.author}</span>
+                  <span className="blog-date">Posted on {this.formatDate(blog.createdAt)}</span>
+                </div>
+                <p className="blog-content">{this.truncateContent(blog.content)}</p>
               </div>
-              <p className="blog-content">{truncateContent(blog.content)}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+}
+
+function ViewBlogs() {
+  const navigate = useNavigate();
+  return <ViewBlogsClass navigate={navigate} />;
 }
 
 export default ViewBlogs;
 ```
 
-### File: react-app/src/Components/ViewBlogs.css
+### react-app/src/Components/Home.css
 ```css
-/* react-app/src/Components/ViewBlogs.css */
-.view-blogs-container {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  padding: 40px 20px;
-}
-
-.view-blogs-header {
-  max-width: 1200px;
-  margin: 0 auto 30px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 20px;
-}
-
-.header-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.blogs-grid {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 25px;
-}
-
-.blog-card {
-  background: white;
-  padding: 25px;
-  border-radius: 10px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s, box-shadow 0.3s;
-}
-
-.blog-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-}
-
-.blog-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #2d3748;
-  margin-bottom: 15px;
-  line-height: 1.3;
-}
-
-.blog-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-  font-size: 0.875rem;
-  color: #718096;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.blog-author {
-  font-weight: 600;
-  color: #4a5568;
-}
-
-.blog-date {
-  font-style: italic;
-}
-
-.blog-content {
-  color: #4a5568;
-  line-height: 1.6;
-  margin: 0;
-}
-
-.loading-container {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.loading-text {
-  margin-top: 20px;
-  font-size: 1.2rem;
-  color: #4a5568;
-}
-
-.no-blogs-container {
-  text-align: center;
-  padding: 80px 20px;
-  background: white;
-  border-radius: 10px;
-  max-width: 600px;
-  margin: 0 auto;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-}
-
-.no-blogs-container h3 {
-  font-size: 2rem;
-  color: #2d3748;
-  margin-bottom: 15px;
-}
-
-.no-blogs-container p {
-  font-size: 1.1rem;
-  color: #718096;
-  margin-bottom: 30px;
-}
-
-@media (max-width: 768px) {
-  .view-blogs-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-buttons {
-    width: 100%;
-  }
-
-  .header-buttons button {
-    flex: 1;
-  }
-
-  .blogs-grid {
-    grid-template-columns: 1fr;
-  }
-}
+.home-container { min-height: 100vh; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; }
+.home-card { background: white; padding: 60px 80px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; max-width: 500px; width: 100%; }
+.home-title { font-size: 2rem; font-weight: 700; color: #2d3748; margin-bottom: 20px; }
+.home-tagline { font-size: 1.1rem; color: #718096; margin-bottom: 40px; }
+.home-buttons { display: flex; gap: 20px; justify-content: center; }
+.btn-home { padding: 12px 30px; font-size: 1rem; font-weight: 600; border-radius: 8px; transition: all 0.3s; border: none; cursor: pointer; }
+.btn-home:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
 ```
 
-### File: react-app/src/App.css
+### react-app/src/Components/AddBlog.css
 ```css
-/* react-app/src/App.css */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.App {
-  min-height: 100vh;
-}
-
-/* Bootstrap override */
-.btn {
-  cursor: pointer;
-}
-
-.btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
+.add-blog-container { min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 40px 20px; }
+.add-blog-wrapper { max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+.page-title { font-size: 2.5rem; font-weight: 700; color: #2d3748; margin-bottom: 30px; text-align: center; }
+.form-label { font-weight: 600; color: #4a5568; margin-bottom: 8px; display: block; }
+.form-control { width: 100%; border: 2px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 1rem; transition: border-color 0.3s; }
+.form-control:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+.mb-3 { margin-bottom: 1.5rem; }
+.button-group { display: flex; gap: 15px; margin-top: 30px; }
+.button-group .btn { flex: 1; padding: 12px; font-size: 1rem; font-weight: 600; border-radius: 8px; transition: all 0.3s; border: none; cursor: pointer; }
+.btn-primary { background-color: #007bff; color: white; }
+.btn-secondary { background-color: #6c757d; color: white; }
+.alert { border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+.alert-success { background-color: #d4edda; color: #155724; }
+.alert-danger { background-color: #f8d7da; color: #721c24; }
 ```
 
-### File: react-app/src/index.js
-```javascript
-// react-app/src/index.js
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-import 'bootstrap/dist/css/bootstrap.min.css';
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+### react-app/src/Components/ViewBlogs.css
+```css
+.view-blogs-container { min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 40px 20px; }
+.view-blogs-header { max-width: 1200px; margin: 0 auto 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
+.page-title { font-size: 2.5rem; font-weight: 700; color: #2d3748; margin: 0; }
+.header-buttons { display: flex; gap: 10px; }
+.btn { padding: 10px 20px; font-size: 1rem; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.3s; }
+.btn-info { background-color: #17a2b8; color: white; }
+.btn-secondary { background-color: #6c757d; color: white; }
+.btn-primary { background-color: #007bff; color: white; }
+.alert { max-width: 1200px; margin: 0 auto 20px; border-radius: 8px; padding: 15px; }
+.alert-danger { background-color: #f8d7da; color: #721c24; }
+.blogs-grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 25px; }
+.blog-card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); transition: transform 0.3s; }
+.blog-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+.blog-title { font-size: 1.5rem; font-weight: 700; color: #2d3748; margin-bottom: 15px; }
+.blog-meta { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 0.875rem; color: #718096; flex-wrap: wrap; gap: 10px; }
+.blog-author { font-weight: 600; color: #4a5568; }
+.blog-content { color: #4a5568; line-height: 1.6; }
+.loading-container { text-align: center; padding: 60px 20px; }
+.spinner-border { width: 3rem; height: 3rem; border: 0.25em solid #007bff; border-right-color: transparent; border-radius: 50%; animation: spin 0.75s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { margin-top: 20px; font-size: 1.2rem; color: #4a5568; }
+.no-blogs-container { text-align: center; padding: 80px 20px; background: white; border-radius: 10px; max-width: 600px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
 ```
 
-### File: react-app/src/index.css
+### react-app/src/App.css
 ```css
-/* react-app/src/index.css */
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubun
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
+.App { min-height: 100vh; }
+```
+
+### react-app/src/index.css
+```css
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
+```
+
+### react-app/public/index.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BlogSpace Management System</title>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>
+```
+
+## SETUP INSTRUCTIONS
+
+**Backend:**
+```bash
+cd nodeapp
+npm install
+npm start
+```
+
+**Frontend:**
+```bash
+cd react-app
+npm install
+npm start
+```
+
+**MongoDB:** Must be running on localhost:27017
+
+Application runs on http://localhost:3000
